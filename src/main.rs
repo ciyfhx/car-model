@@ -59,19 +59,23 @@ fn setup(
         Camera2d,
         Camera {
             hdr: true, // 1. HDR is required for bloom
-            clear_color: ClearColorConfig::Custom(Color::BLACK),
+            clear_color: ClearColorConfig::Custom(Color::WHITE),
             ..default()
         },
     ));
     let car = Car{
         max_mov_speed: 150.0,
         accel_speed: 40.0,
-        brake_speed: 30.0,
+        brake_speed: 60.0,
         ..Default::default()
     };
 
     let car_shape = Rectangle::new(car.track, car.wheel_base);
     let car_color = Color::srgba(1.0, 0.0,0.0, 0.3);
+
+    let wheel_base = car.wheel_base;
+    let max_steering = car.max_steering_rad;
+    let turning_radius = calculate_turning_radius(&car);
 
     commands.spawn(
         (
@@ -101,9 +105,49 @@ fn setup(
                 MeshMaterial2d(wheel_material.clone()),
                 Transform::from_translation(pos),
             ));
+
         }
 
+        //Draw steering angle
+        let arrow = Rectangle::new(2.0, 60.0);
+        let arrow_color = Color::srgba(0.1, 0.1, 0.1, 1.0);
+        let arrow_mesh = meshes.add(arrow);
+        let arrow_material = materials.add(arrow_color);
+        // parent.spawn(
+        //     (
+        //         Mesh2d(arrow_mesh.clone()),
+        //         MeshMaterial2d(arrow_material.clone()),
+        //         Transform::from_translation(Vec3::new(0.0, 20.0, 0.0)),
+        //         )
+        // );
+
+        let mut max_steering_angle_transform = Transform::from_translation(Vec3::new(0.0, 20.0, 0.0));
+        max_steering_angle_transform.rotation = Quat::from_axis_angle(Vec3::Z, max_steering);
+        parent.spawn(
+            (
+                Mesh2d(arrow_mesh.clone()),
+                MeshMaterial2d(arrow_material.clone()),
+                max_steering_angle_transform
+            )
+        );
+
+        //Draw Turning Radius
+        let circle = Circle::new(turning_radius);
+        let circle_color = Color::srgba(0.0, 0.0, 1.0, 1.0);
+        let circle_mesh = meshes.add(circle);
+        let circle_material = materials.add(circle_color);
+        parent.spawn(
+            (
+                Mesh2d(circle_mesh),
+                MeshMaterial2d(circle_material),
+                Transform::from_translation(Vec3::new(turning_radius, -wheel_base/2.0, 0.0)),
+            )
+        );
+
     });
+
+
+
 }
 
 fn update_car_location(
@@ -150,20 +194,19 @@ fn update_car_location(
     if keycode.pressed(KeyCode::ArrowLeft) {
         car.steering_rad = clamp(
             car.steering_rad + f32::to_radians(60.0) * time.delta_secs(),
-            f32::to_radians(-50.0),
-            f32::to_radians(50.0),
+            -car.max_steering_rad,
+            car.max_steering_rad,
         );
     } else if keycode.pressed(KeyCode::ArrowRight) {
         car.steering_rad = clamp(
             car.steering_rad - f32::to_radians(60.0) * time.delta_secs(),
-            f32::to_radians(-50.0),
-            f32::to_radians(50.0),
+            -car.max_steering_rad,
+            car.max_steering_rad,
         );
     } else {
         car.steering_rad = car.steering_rad * 0.9;
     }
 
-    
     let beta = f32::atan(0.5 * f32::tan(car.steering_rad));
     let omega = (car.mov_speed / car.wheel_base) * f32::cos(beta) * f32::tan(car.steering_rad) * time.delta_secs();
     transform.rotate_z(omega);
@@ -182,6 +225,11 @@ fn update_car_location(
         println!("Speed: {:.2}", car.mov_speed);
         println!("Steering Angle (deg): {:.2}", car.steering_rad.to_degrees());
     }
+}
+
+pub fn calculate_turning_radius(car: &Car) -> f32{
+    let beta = f32::atan(0.5 * f32::tan(car.max_steering_rad));
+    car.wheel_base / (f32::tan(car.max_steering_rad) * f32::cos(beta))
 }
 
 #[inline]
